@@ -286,6 +286,7 @@ struct LibraryView: View {
             .navigationTitle("ライブラリ")
             .background(Color.groupedBackground)
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         // 後で追加UIを実装
@@ -294,6 +295,7 @@ struct LibraryView: View {
                             .foregroundStyle(Color(red: 0.2, green: 0.4, blue: 0.3))
                     }
                 }
+                #endif
             }
         }
     }
@@ -840,6 +842,7 @@ struct AIView: View {
             .navigationTitle("AI分析")
             .background(Color.groupedBackground)
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings = true
@@ -848,6 +851,7 @@ struct AIView: View {
                             .foregroundStyle(deepGreen)
                     }
                 }
+                #endif
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
@@ -1256,12 +1260,16 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("設定")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarLeading) {
                     Button("閉じる") { dismiss() }
                         .foregroundStyle(deepGreen)
                 }
+                #endif
             }
             .onAppear {
                 tempAPIKey = apiKey
