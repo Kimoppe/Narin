@@ -4,6 +4,24 @@ import AVFoundation
 import VisionKit
 import Vision
 
+// MARK: - Platform Color Compatibility
+extension Color {
+    static var groupedBackground: Color {
+        #if os(iOS)
+        Color(UIColor.systemGroupedBackground)
+        #else
+        Color(NSColor.windowBackgroundColor)
+        #endif
+    }
+    static var secondaryGroupedBackground: Color {
+        #if os(iOS)
+        Color(UIColor.secondarySystemGroupedBackground)
+        #else
+        Color(NSColor.controlBackgroundColor)
+        #endif
+    }
+}
+
 // MARK: - Data Models
 struct Subject: Identifiable {
     let id = UUID()
@@ -161,7 +179,7 @@ struct HomeView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Narin")
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.groupedBackground)
         }
     }
 }
@@ -194,7 +212,7 @@ struct LibraryView: View {
                     TextField("資料を検索...", text: $searchText)
                 }
                 .padding(10)
-                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .background(Color.secondaryGroupedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -266,7 +284,7 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("ライブラリ")
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.groupedBackground)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -458,7 +476,7 @@ struct RecordingView: View {
                                 .padding()
                         }
                         .frame(maxHeight: 160)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.secondaryGroupedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
                     }
@@ -466,7 +484,7 @@ struct RecordingView: View {
                 }
             }
             .navigationTitle("録音")
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.groupedBackground)
             .alert("マイクへのアクセス", isPresented: $showPermissionAlert) {
                 Button("設定を開く") {
                     #if os(iOS)
@@ -733,7 +751,7 @@ struct AIView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .padding(14)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.secondaryGroupedBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         .padding(.horizontal)
@@ -811,7 +829,7 @@ struct AIView: View {
                             Text(analysisResult)
                                 .font(.body)
                                 .padding()
-                                .background(Color(UIColor.secondarySystemGroupedBackground))
+                                .background(Color.secondaryGroupedBackground)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .padding(.horizontal)
                         }
@@ -820,7 +838,7 @@ struct AIView: View {
                 .padding(.vertical)
             }
             .navigationTitle("AI分析")
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.groupedBackground)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -980,7 +998,7 @@ struct ScanView: View {
                                     .padding()
                             }
                             .frame(maxHeight: 200)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.secondaryGroupedBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .padding(.horizontal)
 
@@ -1049,7 +1067,7 @@ struct ScanView: View {
                             }
                         }
                         .padding()
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.secondaryGroupedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
                     }
@@ -1070,7 +1088,7 @@ struct ScanView: View {
                 .padding(.vertical)
             }
             .navigationTitle("スキャン")
-            .background(Color(UIColor.systemGroupedBackground))
+            .background(Color.groupedBackground)
             .sheet(isPresented: $showCamera) {
                 #if os(iOS)
                 DocumentScannerView(scannedText: $scannedText, isProcessing: $isProcessing)
@@ -1192,7 +1210,9 @@ struct SettingsView: View {
                             TextField("sk-ant-...", text: $tempAPIKey)
                                 .font(.system(.body, design: .monospaced))
                                 .autocorrectionDisabled()
+                                #if os(iOS)
                                 .textInputAutocapitalization(.never)
+                                #endif
                         } else {
                             SecureField("sk-ant-...", text: $tempAPIKey)
                                 .font(.system(.body, design: .monospaced))
@@ -1355,7 +1375,7 @@ struct MaterialRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(12)
-        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .background(Color.secondaryGroupedBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
