@@ -578,75 +578,82 @@ enum AnalysisType: String, CaseIterable {
     }
 }
 
-// MARK: - ClaudeAPIClient
-class ClaudeAPIClient: ObservableObject {
-    @AppStorage("claudeAPIKey") var apiKey = ""
-
-    private struct APIMessage: Codable {
-        let role: String
-        let content: String
-    }
+// MARK: - OllamaClient
+class OllamaClient: ObservableObject {
+    @AppStorage("ollamaHost") var host = "localhost"
+    @AppStorage("ollamaModel") var model = "qwen2.5"
 
     private struct RequestBody: Codable {
         let model: String
-        let max_tokens: Int
-        let messages: [APIMessage]
+        let prompt: String
+        let stream: Bool
     }
 
     private struct ResponseBody: Codable {
-        struct Content: Codable {
-            let type: String
-            let text: String
-        }
-        let content: [Content]
+        let response: String
     }
 
-    enum ClaudeError: LocalizedError {
-        case noAPIKey
+    enum OllamaError: LocalizedError {
+        case notConfigured
+        case connectionFailed
         case apiError(Int)
         case decodingError
 
         var errorDescription: String? {
             switch self {
-            case .noAPIKey:
-                return "Claude APIキーが設定されていません。設定画面からAPIキーを入力してください。"
+            case .notConfigured:
+                return "OllamaのホストIPが設定されていません。設定画面から入力してください。"
+            case .connectionFailed:
+                return "Ollamaサーバーに接続できません。MacでOllamaが起動しているか確認してください。"
             case .apiError(let code):
-                return "API呼び出しに失敗しました（ステータス: \(code)）。APIキーを確認してください。"
+                return "Ollama APIエラー（ステータス: \(code)）。"
             case .decodingError:
                 return "レスポンスの解析に失敗しました。"
             }
         }
     }
 
+    var baseURL: String { "http://\(host):11434" }
+
     func analyze(material: Material, analysisType: AnalysisType) async throws -> String {
-        guard !apiKey.isEmpty else { throw ClaudeError.noAPIKey }
+        guard !host.isEmpty else { throw OllamaError.notConfigured }
 
         let prompt = buildPrompt(material: material, type: analysisType)
-        let url = URL(string: "https://api.anthropic.com/v1/messages")!
+        guard let url = URL(string: "\(baseURL)/api/generate") else {
+            throw OllamaError.notConfigured
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120
 
-        let body = RequestBody(
-            model: "claude-opus-4-6",
-            max_tokens: 2000,
-            messages: [APIMessage(role: "user", content: prompt)]
-        )
+        let body = RequestBody(model: model, prompt: prompt, stream: false)
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw ClaudeError.apiError(0)
+            throw OllamaError.connectionFailed
         }
         guard httpResponse.statusCode == 200 else {
-            throw ClaudeError.apiError(httpResponse.statusCode)
+            throw OllamaError.apiError(httpResponse.statusCode)
         }
 
         let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
-        return responseBody.content.first?.text ?? ""
+        return responseBody.response
+    }
+
+    func checkConnection() async -> Bool {
+        guard let url = URL(string: "\(baseURL)/api/tags") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
     }
 
     private func buildPrompt(material: Material, type: AnalysisType) -> String {
@@ -667,7 +674,7 @@ class ClaudeAPIClient: ObservableObject {
 // MARK: - AIView
 struct AIView: View {
     @EnvironmentObject var appData: AppData
-    @StateObject private var claudeClient = ClaudeAPIClient()
+    @StateObject private var ollamaClient = OllamaClient()
     @State private var selectedMaterial: Material? = nil
     @State private var selectedAnalysisType: AnalysisType = .summary
     @State private var analysisResult = ""
@@ -675,6 +682,7 @@ struct AIView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showSettings = false
+    @State private var isConnected: Bool? = nil
 
     private let deepGreen = Color(red: 0.2, green: 0.4, blue: 0.3)
 
@@ -682,32 +690,52 @@ struct AIView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    if claudeClient.apiKey.isEmpty {
-                        HStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                    // Ollamaサーバー接続状態バナー
+                    HStack(spacing: 12) {
+                        if isConnected == nil {
+                            ProgressView().scaleEffect(0.8)
+                            Text("Ollamaに接続中…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else if isConnected == true {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("APIキーが未設定です")
+                                Text("Ollama接続済み")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
-                                Text("設定画面からClaude APIキーを入力してください")
+                                Text("モデル: \(ollamaClient.model)  (\(ollamaClient.host))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            Button("設定") { showSettings = true }
-                                .font(.caption)
-                                .buttonStyle(.borderedProminent)
-                                .tint(deepGreen)
+                        } else {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ollamaに接続できません")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Text("MacでOllamaを起動し、設定でIPを確認してください")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        .padding()
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                        )
-                        .padding(.horizontal)
+                        Spacer()
+                        Button("設定") { showSettings = true }
+                            .font(.caption)
+                            .buttonStyle(.borderedProminent)
+                            .tint(deepGreen)
+                    }
+                    .padding()
+                    .background(isConnected == true ? Color.green.opacity(0.08) : Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke((isConnected == true ? Color.green : Color.orange).opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal)
+                    .task {
+                        isConnected = await ollamaClient.checkConnection()
                     }
 
                     // 資料選択
@@ -870,7 +898,7 @@ struct AIView: View {
         analysisResult = ""
 
         do {
-            let result = try await claudeClient.analyze(material: material, analysisType: selectedAnalysisType)
+            let result = try await ollamaClient.analyze(material: material, analysisType: selectedAnalysisType)
             await MainActor.run {
                 analysisResult = result
                 isAnalyzing = false
@@ -1198,45 +1226,80 @@ struct DocumentScannerView: UIViewControllerRepresentable {
 
 // MARK: - SettingsView
 struct SettingsView: View {
-    @AppStorage("claudeAPIKey") private var apiKey = ""
-    @State private var tempAPIKey = ""
-    @State private var isKeyVisible = false
+    @AppStorage("ollamaHost") private var host = "localhost"
+    @AppStorage("ollamaModel") private var model = "qwen2.5"
+    @State private var tempHost = ""
+    @State private var tempModel = ""
+    @State private var isConnected: Bool? = nil
+    @State private var isTesting = false
     @Environment(\.dismiss) private var dismiss
 
     private let deepGreen = Color(red: 0.2, green: 0.4, blue: 0.3)
+    private let commonModels = ["qwen2.5", "llama3.2", "gemma2", "phi3", "mistral", "llama3.1"]
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    HStack {
-                        if isKeyVisible {
-                            TextField("sk-ant-...", text: $tempAPIKey)
-                                .font(.system(.body, design: .monospaced))
-                                .autocorrectionDisabled()
-                                #if os(iOS)
-                                .textInputAutocapitalization(.never)
-                                #endif
-                        } else {
-                            SecureField("sk-ant-...", text: $tempAPIKey)
-                                .font(.system(.body, design: .monospaced))
-                        }
-                        Button {
-                            isKeyVisible.toggle()
-                        } label: {
-                            Image(systemName: isKeyVisible ? "eye.slash" : "eye")
-                                .foregroundStyle(deepGreen)
+                    TextField("例: 192.168.1.5", text: $tempHost)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.numbersAndPunctuation)
+                        #endif
+                } header: {
+                    Text("OllamaサーバーのIPアドレス")
+                } footer: {
+                    Text("MacとiPhoneを同じWi-Fiに接続してください。MacのIPはシステム設定 > Wi-Fi で確認できます。\niPhoneから同じMacに繋ぐ場合は「localhost」のままでOKです（シミュレータ使用時）。")
+                }
+
+                Section {
+                    Picker("モデル", selection: $tempModel) {
+                        ForEach(commonModels, id: \.self) { m in
+                            Text(m).tag(m)
                         }
                     }
+                    TextField("カスタムモデル名", text: $tempModel)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
                 } header: {
-                    Text("Claude APIキー")
+                    Text("モデル")
                 } footer: {
-                    Text("Anthropic ConsoleからAPIキーを取得してください。キーはこのデバイス内のみに保存されます。")
+                    Text("Ollamaにインストール済みのモデル名を入力してください（ollama list で確認）。")
                 }
 
                 Section {
                     Button {
-                        apiKey = tempAPIKey
+                        Task {
+                            isTesting = true
+                            let client = OllamaClient()
+                            client.host = tempHost
+                            isConnected = await client.checkConnection()
+                            isTesting = false
+                        }
+                    } label: {
+                        HStack {
+                            Text("接続テスト")
+                            Spacer()
+                            if isTesting {
+                                ProgressView().scaleEffect(0.8)
+                            } else if let connected = isConnected {
+                                Image(systemName: connected ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(connected ? .green : .red)
+                                Text(connected ? "接続OK" : "接続失敗")
+                                    .foregroundStyle(connected ? .green : .red)
+                            }
+                        }
+                    }
+                    .foregroundStyle(deepGreen)
+                }
+
+                Section {
+                    Button {
+                        host = tempHost
+                        model = tempModel
                         dismiss()
                     } label: {
                         Text("保存")
@@ -1272,7 +1335,8 @@ struct SettingsView: View {
                 #endif
             }
             .onAppear {
-                tempAPIKey = apiKey
+                tempHost = host
+                tempModel = model
             }
         }
     }
