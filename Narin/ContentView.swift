@@ -686,57 +686,58 @@ struct AIView: View {
 
     private let deepGreen = Color(red: 0.2, green: 0.4, blue: 0.3)
 
+    @ViewBuilder
+    private var connectionBanner: some View {
+        let bannerColor: Color = isConnected == true ? .green : .orange
+        HStack(spacing: 12) {
+            if isConnected == nil {
+                ProgressView().scaleEffect(0.8)
+                Text("Ollamaに接続中…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if isConnected == true {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ollama接続済み")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("モデル: \(ollamaClient.model)  (\(ollamaClient.host))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ollamaに接続できません")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text("MacでOllamaを起動し、設定でIPを確認してください")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button("設定") { showSettings = true }
+                .font(.caption)
+                .buttonStyle(.borderedProminent)
+                .tint(deepGreen)
+        }
+        .padding()
+        .background(bannerColor.opacity(isConnected == true ? 0.08 : 0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(bannerColor.opacity(0.3), lineWidth: 1))
+        .padding(.horizontal)
+        .task { isConnected = await ollamaClient.checkConnection() }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     // Ollamaサーバー接続状態バナー
-                    HStack(spacing: 12) {
-                        if isConnected == nil {
-                            ProgressView().scaleEffect(0.8)
-                            Text("Ollamaに接続中…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        } else if isConnected == true {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Ollama接続済み")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("モデル: \(ollamaClient.model)  (\(ollamaClient.host))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Ollamaに接続できません")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                Text("MacでOllamaを起動し、設定でIPを確認してください")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Button("設定") { showSettings = true }
-                            .font(.caption)
-                            .buttonStyle(.borderedProminent)
-                            .tint(deepGreen)
-                    }
-                    .padding()
-                    .background(isConnected == true ? Color.green.opacity(0.08) : Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke((isConnected == true ? Color.green : Color.orange).opacity(0.3), lineWidth: 1)
-                    )
-                    .padding(.horizontal)
-                    .task {
-                        isConnected = await ollamaClient.checkConnection()
-                    }
+                    connectionBanner
 
                     // 資料選択
                     VStack(alignment: .leading, spacing: 8) {
